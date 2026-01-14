@@ -9,7 +9,7 @@
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/svg+xml" href="icon.svg">
     <link rel="apple-touch-icon" href="icon-192.png">
-    <title>Knight's Last Stand</title>
+    <title>Knight's Ransom</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Rye&family=IM+Fell+English:ital@0;1&display=swap');
 
@@ -1556,9 +1556,9 @@
     </div>
 
     <div id="menu-screen">
-        <h1 class="title">Knight's Last Stand</h1>
+        <h1 class="title">Knight's Ransom</h1>
         <p class="subtitle">Defend your castle against the horde. Collect weapons and armor. Survive.</p>
-        <button class="menu-btn" id="start-btn">Start Hunt</button>
+        <button class="menu-btn" id="start-btn">Start Game</button>
         <p class="instructions">WASD or Arrow Keys to move • Auto-aim shoots automatically<br>Walk over drops to collect • SPACE to swap weapons</p>
     </div>
 
@@ -2989,6 +2989,105 @@
         let isBossWave = false;
         let bossSpawned = false;
         let bossDefeated = false;
+        
+        // Terrain elements
+        let terrainElements = [];
+        let grassPatches = [];
+        let dirtPatches = [];
+        
+        function generateTerrain() {
+            terrainElements = [];
+            grassPatches = [];
+            dirtPatches = [];
+            
+            // Generate random grass color variations for ground
+            for (let i = 0; i < 800; i++) {
+                grassPatches.push({
+                    x: Math.random() * WORLD_WIDTH,
+                    y: Math.random() * WORLD_HEIGHT,
+                    radius: 20 + Math.random() * 40,
+                    color: Math.random() > 0.5 ? '#3d5c2d' : '#4a6b3a'
+                });
+            }
+            
+            // Generate dirt patches
+            for (let i = 0; i < 40; i++) {
+                dirtPatches.push({
+                    x: Math.random() * WORLD_WIDTH,
+                    y: Math.random() * WORLD_HEIGHT,
+                    radiusX: 30 + Math.random() * 80,
+                    radiusY: 20 + Math.random() * 50,
+                    rotation: Math.random() * Math.PI
+                });
+            }
+            
+            // Generate trees (avoid center where player spawns)
+            for (let i = 0; i < 60; i++) {
+                let x, y;
+                do {
+                    x = Math.random() * WORLD_WIDTH;
+                    y = Math.random() * WORLD_HEIGHT;
+                } while (Math.abs(x - WORLD_WIDTH/2) < 300 && Math.abs(y - WORLD_HEIGHT/2) < 300);
+                
+                terrainElements.push({
+                    type: 'tree',
+                    x: x,
+                    y: y,
+                    size: 0.8 + Math.random() * 0.6,
+                    variant: Math.floor(Math.random() * 3) // 3 tree variants
+                });
+            }
+            
+            // Generate rocks
+            for (let i = 0; i < 80; i++) {
+                let x, y;
+                do {
+                    x = Math.random() * WORLD_WIDTH;
+                    y = Math.random() * WORLD_HEIGHT;
+                } while (Math.abs(x - WORLD_WIDTH/2) < 200 && Math.abs(y - WORLD_HEIGHT/2) < 200);
+                
+                terrainElements.push({
+                    type: 'rock',
+                    x: x,
+                    y: y,
+                    size: 0.5 + Math.random() * 1,
+                    variant: Math.floor(Math.random() * 3)
+                });
+            }
+            
+            // Generate bushes
+            for (let i = 0; i < 100; i++) {
+                terrainElements.push({
+                    type: 'bush',
+                    x: Math.random() * WORLD_WIDTH,
+                    y: Math.random() * WORLD_HEIGHT,
+                    size: 0.6 + Math.random() * 0.6
+                });
+            }
+            
+            // Generate grass tufts
+            for (let i = 0; i < 200; i++) {
+                terrainElements.push({
+                    type: 'grass_tuft',
+                    x: Math.random() * WORLD_WIDTH,
+                    y: Math.random() * WORLD_HEIGHT,
+                    size: 0.5 + Math.random() * 0.5
+                });
+            }
+            
+            // Generate flowers
+            for (let i = 0; i < 60; i++) {
+                terrainElements.push({
+                    type: 'flower',
+                    x: Math.random() * WORLD_WIDTH,
+                    y: Math.random() * WORLD_HEIGHT,
+                    color: ['#ff6b6b', '#ffd93d', '#6bcb77', '#4d96ff', '#ff8fab'][Math.floor(Math.random() * 5)]
+                });
+            }
+            
+            // Sort by Y position for proper layering
+            terrainElements.sort((a, b) => a.y - b.y);
+        }
 
         // Initialize
         function init() {
@@ -3245,6 +3344,9 @@
             mouseWorldPos = null;
             playerElevated = false;
             repairMode = false;
+            
+            // Generate terrain
+            generateTerrain();
             
             document.getElementById('menu-screen').classList.add('hidden');
             document.getElementById('game-over-screen').classList.add('hidden');
@@ -6865,6 +6967,268 @@
             }
         }
         
+        // ========== TERRAIN DRAWING FUNCTIONS ==========
+        
+        function drawTerrainBehind() {
+            // Draw terrain elements that should appear behind entities
+            for (let elem of terrainElements) {
+                // Only draw if on screen
+                if (elem.x < camera.x - 100 || elem.x > camera.x + GAME_WIDTH + 100 ||
+                    elem.y < camera.y - 100 || elem.y > camera.y + GAME_HEIGHT + 100) {
+                    continue;
+                }
+                
+                if (elem.type === 'grass_tuft') {
+                    drawGrassTuft(elem);
+                } else if (elem.type === 'flower') {
+                    drawFlower(elem);
+                }
+            }
+        }
+        
+        function drawTerrainFront() {
+            // Draw terrain elements that should appear in front (trees, rocks, bushes)
+            for (let elem of terrainElements) {
+                // Only draw if on screen
+                if (elem.x < camera.x - 100 || elem.x > camera.x + GAME_WIDTH + 100 ||
+                    elem.y < camera.y - 100 || elem.y > camera.y + GAME_HEIGHT + 100) {
+                    continue;
+                }
+                
+                // Only draw elements that are "in front" of player based on Y position
+                if (elem.type === 'tree') {
+                    drawTree(elem);
+                } else if (elem.type === 'rock') {
+                    drawRock(elem);
+                } else if (elem.type === 'bush') {
+                    drawBush(elem);
+                }
+            }
+        }
+        
+        function drawGrassTuft(elem) {
+            ctx.save();
+            ctx.translate(elem.x, elem.y);
+            ctx.scale(elem.size, elem.size);
+            
+            // Wind sway
+            const sway = Math.sin(Date.now() / 500 + elem.x * 0.1) * 0.1;
+            
+            ctx.fillStyle = '#2d5a1e';
+            for (let i = -2; i <= 2; i++) {
+                ctx.save();
+                ctx.rotate(i * 0.2 + sway);
+                ctx.beginPath();
+                ctx.moveTo(-1, 0);
+                ctx.quadraticCurveTo(0, -15, 1, 0);
+                ctx.fill();
+                ctx.restore();
+            }
+            ctx.restore();
+        }
+        
+        function drawFlower(elem) {
+            ctx.save();
+            ctx.translate(elem.x, elem.y);
+            
+            // Stem
+            ctx.strokeStyle = '#2d5a1e';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(0, -10);
+            ctx.stroke();
+            
+            // Petals
+            ctx.fillStyle = elem.color;
+            for (let i = 0; i < 5; i++) {
+                ctx.save();
+                ctx.translate(0, -12);
+                ctx.rotate(i * Math.PI * 2 / 5);
+                ctx.beginPath();
+                ctx.ellipse(0, -4, 3, 5, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+            
+            // Center
+            ctx.fillStyle = '#ffd700';
+            ctx.beginPath();
+            ctx.arc(0, -12, 3, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.restore();
+        }
+        
+        function drawTree(elem) {
+            ctx.save();
+            ctx.translate(elem.x, elem.y);
+            ctx.scale(elem.size, elem.size);
+            
+            // Shadow
+            ctx.fillStyle = 'rgba(0,0,0,0.2)';
+            ctx.beginPath();
+            ctx.ellipse(0, 5, 25, 10, 0, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Trunk
+            ctx.fillStyle = '#4a3728';
+            ctx.fillRect(-8, -40, 16, 45);
+            
+            // Trunk detail
+            ctx.fillStyle = '#3a2a1a';
+            ctx.fillRect(-6, -35, 4, 35);
+            
+            // Foliage based on variant
+            if (elem.variant === 0) {
+                // Round tree
+                ctx.fillStyle = '#2d5a1e';
+                ctx.beginPath();
+                ctx.arc(0, -60, 35, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#3d6a2e';
+                ctx.beginPath();
+                ctx.arc(-10, -65, 20, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#4d7a3e';
+                ctx.beginPath();
+                ctx.arc(8, -55, 15, 0, Math.PI * 2);
+                ctx.fill();
+            } else if (elem.variant === 1) {
+                // Pine tree
+                ctx.fillStyle = '#1e4a1e';
+                ctx.beginPath();
+                ctx.moveTo(0, -100);
+                ctx.lineTo(-30, -40);
+                ctx.lineTo(30, -40);
+                ctx.closePath();
+                ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(0, -80);
+                ctx.lineTo(-35, -30);
+                ctx.lineTo(35, -30);
+                ctx.closePath();
+                ctx.fill();
+                ctx.fillStyle = '#2d5a2d';
+                ctx.beginPath();
+                ctx.moveTo(0, -60);
+                ctx.lineTo(-40, -10);
+                ctx.lineTo(40, -10);
+                ctx.closePath();
+                ctx.fill();
+            } else {
+                // Oak tree
+                ctx.fillStyle = '#3d6a2e';
+                ctx.beginPath();
+                ctx.arc(-15, -55, 25, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(15, -55, 25, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(0, -70, 28, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#4d7a3e';
+                ctx.beginPath();
+                ctx.arc(-5, -75, 15, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
+            ctx.restore();
+        }
+        
+        function drawRock(elem) {
+            ctx.save();
+            ctx.translate(elem.x, elem.y);
+            ctx.scale(elem.size, elem.size);
+            
+            // Shadow
+            ctx.fillStyle = 'rgba(0,0,0,0.2)';
+            ctx.beginPath();
+            ctx.ellipse(0, 5, 15, 6, 0, 0, Math.PI * 2);
+            ctx.fill();
+            
+            if (elem.variant === 0) {
+                // Round boulder
+                ctx.fillStyle = '#6a6a6a';
+                ctx.beginPath();
+                ctx.ellipse(0, -8, 14, 12, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#7a7a7a';
+                ctx.beginPath();
+                ctx.ellipse(-3, -10, 8, 6, -0.3, 0, Math.PI * 2);
+                ctx.fill();
+            } else if (elem.variant === 1) {
+                // Jagged rock
+                ctx.fillStyle = '#5a5a5a';
+                ctx.beginPath();
+                ctx.moveTo(-12, 0);
+                ctx.lineTo(-15, -10);
+                ctx.lineTo(-5, -18);
+                ctx.lineTo(5, -15);
+                ctx.lineTo(12, -20);
+                ctx.lineTo(15, -8);
+                ctx.lineTo(10, 0);
+                ctx.closePath();
+                ctx.fill();
+                ctx.fillStyle = '#7a7a7a';
+                ctx.beginPath();
+                ctx.moveTo(-8, -5);
+                ctx.lineTo(-5, -14);
+                ctx.lineTo(3, -12);
+                ctx.lineTo(5, -5);
+                ctx.closePath();
+                ctx.fill();
+            } else {
+                // Flat stone
+                ctx.fillStyle = '#6a6a6a';
+                ctx.beginPath();
+                ctx.ellipse(0, -5, 18, 8, 0.2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#8a8a8a';
+                ctx.beginPath();
+                ctx.ellipse(-2, -7, 10, 5, 0.2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
+            ctx.restore();
+        }
+        
+        function drawBush(elem) {
+            ctx.save();
+            ctx.translate(elem.x, elem.y);
+            ctx.scale(elem.size, elem.size);
+            
+            // Shadow
+            ctx.fillStyle = 'rgba(0,0,0,0.15)';
+            ctx.beginPath();
+            ctx.ellipse(0, 3, 18, 6, 0, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Bush body
+            ctx.fillStyle = '#2d5a1e';
+            ctx.beginPath();
+            ctx.arc(-8, -8, 12, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(8, -8, 12, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(0, -12, 14, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Highlights
+            ctx.fillStyle = '#3d6a2e';
+            ctx.beginPath();
+            ctx.arc(-5, -14, 6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(6, -10, 5, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.restore();
+        }
+        
         function drawBuildings() {
             for (let b of buildings) {
                 ctx.save();
@@ -7796,41 +8160,66 @@
         }
 
         function render() {
-            // Clear
-            ctx.fillStyle = '#2d1810';
+            // Clear with grass base color
+            ctx.fillStyle = '#4a7c3f';
             ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
             
             // Save context and apply camera transform
             ctx.save();
             ctx.translate(-camera.x, -camera.y);
             
-            // Draw ground texture (tile across visible area + buffer)
-            ctx.strokeStyle = 'rgba(0,0,0,0.1)';
-            const startX = Math.floor(camera.x / 40) * 40;
-            const startY = Math.floor(camera.y / 40) * 40;
-            for (let i = startX; i < camera.x + GAME_WIDTH + 40; i += 40) {
-                for (let j = startY; j < camera.y + GAME_HEIGHT + 40; j += 40) {
+            // Draw grass color variations (background layer)
+            for (let patch of grassPatches) {
+                if (patch.x > camera.x - 100 && patch.x < camera.x + GAME_WIDTH + 100 &&
+                    patch.y > camera.y - 100 && patch.y < camera.y + GAME_HEIGHT + 100) {
+                    ctx.beginPath();
+                    ctx.arc(patch.x, patch.y, patch.radius, 0, Math.PI * 2);
+                    ctx.fillStyle = patch.color;
+                    ctx.fill();
+                }
+            }
+            
+            // Draw dirt patches
+            ctx.fillStyle = '#8b7355';
+            for (let dirt of dirtPatches) {
+                if (dirt.x > camera.x - 150 && dirt.x < camera.x + GAME_WIDTH + 150 &&
+                    dirt.y > camera.y - 100 && dirt.y < camera.y + GAME_HEIGHT + 100) {
+                    ctx.save();
+                    ctx.translate(dirt.x, dirt.y);
+                    ctx.rotate(dirt.rotation);
+                    ctx.beginPath();
+                    ctx.ellipse(0, 0, dirt.radiusX, dirt.radiusY, 0, 0, Math.PI * 2);
+                    ctx.fillStyle = '#8b7355';
+                    ctx.fill();
+                    // Darker edge
+                    ctx.beginPath();
+                    ctx.ellipse(0, 0, dirt.radiusX * 0.7, dirt.radiusY * 0.7, 0, 0, Math.PI * 2);
+                    ctx.fillStyle = '#9c8465';
+                    ctx.fill();
+                    ctx.restore();
+                }
+            }
+            
+            // Draw subtle grid for building reference
+            ctx.strokeStyle = 'rgba(0,0,0,0.05)';
+            const startX = Math.floor(camera.x / GRID_SIZE) * GRID_SIZE;
+            const startY = Math.floor(camera.y / GRID_SIZE) * GRID_SIZE;
+            for (let i = startX; i < camera.x + GAME_WIDTH + GRID_SIZE; i += GRID_SIZE) {
+                for (let j = startY; j < camera.y + GAME_HEIGHT + GRID_SIZE; j += GRID_SIZE) {
                     if (i >= 0 && i < WORLD_WIDTH && j >= 0 && j < WORLD_HEIGHT) {
-                        ctx.strokeRect(i, j, 40, 40);
+                        ctx.strokeRect(i, j, GRID_SIZE, GRID_SIZE);
                     }
                 }
             }
             
-            // Draw world boundary
-            ctx.strokeStyle = 'rgba(255, 100, 50, 0.5)';
-            ctx.lineWidth = 4;
+            // Draw world boundary (forest edge)
+            ctx.strokeStyle = '#2d4a1c';
+            ctx.lineWidth = 8;
             ctx.strokeRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
             ctx.lineWidth = 1;
             
-            // Draw dust particles (background decoration)
-            ctx.fillStyle = 'rgba(212, 165, 116, 0.1)';
-            for (let i = 0; i < 30; i++) {
-                const x = (Date.now() / 50 + i * 150) % WORLD_WIDTH;
-                const y = (Math.sin(Date.now() / 1000 + i) * 20) + (i * 80) % WORLD_HEIGHT;
-                ctx.beginPath();
-                ctx.arc(x, y, 2, 0, Math.PI * 2);
-                ctx.fill();
-            }
+            // Draw terrain elements behind entities
+            drawTerrainBehind();
             
             if (gameState !== 'playing') {
                 ctx.restore();
@@ -8014,6 +8403,9 @@
                     }
                 }
             }
+            
+            // Draw foreground terrain (trees, rocks, bushes in front of player based on Y)
+            drawTerrainFront();
             
             // Restore camera transform
             ctx.restore();
